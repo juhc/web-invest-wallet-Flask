@@ -1,34 +1,32 @@
-from flask import Blueprint, render_template
-from tinkoff.invest import (
-    Client,
-    GenerateBrokerReportRequest,
-    GetBrokerReportRequest,
-    InstrumentStatus,
-)
+from flask import Blueprint, jsonify
+import requests
+from tinkoff.invest import Client
+from . import cache
+import json
 import tinkoff.invest as tinvest
-from datetime import datetime, timedelta
-import pandas as pd
+import os
 
+
+
+token = os.getenv('API_TOKEN')
 
 main = Blueprint("main", __name__)
+    
 
-
-@main.route("/")
+@main.route("/get-shares")
 def index():
-    get_shares()
-    return "AAAA"
+    shares = json.dumps(get_shares())
+    return jsonify(shares)
 
-
+@cache.cached(timeout=15)
 def get_shares():
-    token = ""
-
+    
     with Client(token) as client:
         accounts = client.users.get_accounts().accounts
         data = []
 
         for account in accounts:
             if account.status != account.status.ACCOUNT_STATUS_CLOSED:
-                print(account.name)
                 portfolio = client.operations.get_portfolio(account_id=account.id)
 
                 for position in portfolio.positions:
@@ -38,7 +36,7 @@ def get_shares():
                                 id=position.figi,
                             ).instrument.name
                         
-                        d = {
+                        share_info = {
                             'name': share_name,
                             'quantity': position.quantity.units,
                             'expected_yield': cast_money(position.expected_yield),
@@ -47,15 +45,35 @@ def get_shares():
                             'nkd': cast_money(position.current_nkd)
                         }
 
-                        d['sell_sum'] = (d['average_buy_price']*d['quantity'])+d['expected_yield']+(d['nkd']*d['quantity'])
-                        d['comission'] = d['sell_sum']*0.003
-                        d['tax'] = d['expected_yield']*0.013 if d['expected_yield'] > 0 else 0
-                        data.append(d)
+                        share_info['sell_sum'] = (share_info['average_buy_price']*share_info['quantity'])+share_info['expected_yield']+(share_info['nkd']*share_info['quantity'])
+                        share_info['comission'] = share_info['sell_sum']*0.003
+                        share_info['tax'] = share_info['expected_yield']*0.013 if share_info['expected_yield'] > 0 else 0
+                        
+                        if share_info['currency'] != 'rub':
+                            share_info = convert_to_rub(share_info)
+                        
+                        data.append(share_info)
 
-        df = pd.DataFrame(data)
-        
+        return data
+    
+@cache.cached(timeout=60)
+def get_valutes():
+    response = requests.get('https://www.cbr-xml-daily.ru/daily_json.js')
+    if response.status_code == 200:
+        return response.json()
 
-        print(df)
+def convert_to_rub(share):
+    valutes = get_valutes()
+    valute = valutes['Valute'][share['currency'].upper()]
+    
+    share['expected_yield'] = share['expected_yield']*valute['Value']
+    share['average_buy_price'] = share['average_buy_price']*valute['Value']
+    share['sell_sum'] = share['sell_sum']*valute['Value']
+    share['comission'] = share['comission']*valute['Value']
+    
+    return share
+    
+    
 
 def cast_money(value):
     return value.units + value.nano / 1e9
