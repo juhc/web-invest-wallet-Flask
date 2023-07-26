@@ -7,13 +7,12 @@ import tinkoff.invest as tinvest
 import os
 
 
-
 token = os.getenv('API_TOKEN')
 
 main = Blueprint("main", __name__)
     
 
-@main.route("/get-shares")
+@main.route("/api/get-shares")
 def index():
     shares = json.dumps(get_shares())
     return jsonify(shares)
