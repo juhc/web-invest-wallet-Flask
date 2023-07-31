@@ -43,15 +43,17 @@ def get_shares():
                             'currency': position.average_position_price.currency,
                             'nkd': cast_money(position.current_nkd)
                         }
-
-                        share_info['sell_sum'] = (share_info['average_buy_price']*share_info['quantity'])+share_info['expected_yield']+(share_info['nkd']*share_info['quantity'])
-                        share_info['comission'] = share_info['sell_sum']*0.003
-                        share_info['tax'] = share_info['expected_yield']*0.013 if share_info['expected_yield'] > 0 else 0
                         
-                        if share_info['currency'] != 'rub':
-                            share_info = convert_to_rub(share_info)
-                        
-                        data.append(share_info)
+                        if share_info['expected_yield']:
+                            share_info['sell_sum'] = (share_info['average_buy_price']*share_info['quantity'])+share_info['expected_yield']+(share_info['nkd']*share_info['quantity'])
+                            share_info['comission'] = share_info['sell_sum']*0.003
+                            share_info['tax'] = share_info['expected_yield']*0.013 if share_info['expected_yield'] > 0 else 0
+                            share_info['percent_yield'] = share_info['expected_yield'] / (share_info['sell_sum'] / 100)
+                            
+                            if share_info['currency'] != 'rub':
+                                share_info = convert_to_rub(share_info)
+                            
+                            data.append(share_info)
 
         return data
     
